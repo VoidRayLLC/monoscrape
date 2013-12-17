@@ -11,6 +11,15 @@ desktop.ini
 # Binaries
 ##################################################
 *.exe
+*.exe.mdb
+# Not sure if I really want to ignore Awesomium or not
+Awesomium*
+
+##################################################
+# Runtime data
+##################################################
+browser.jpg
+browser.png
 
 
 # -*- mode: bash; -*-
