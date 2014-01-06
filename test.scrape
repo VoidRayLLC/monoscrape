@@ -1,0 +1,10 @@
+
+add-post-script jquery-1.10.2.min.js
+# add-post-script jquery.simulate.js
+# bililiteRange.js
+add-post-script j-ulrich/jquery.simulate.js
+add-post-script j-ulrich/jquery.simulate.ext.js
+
+add-post-script test.js
+
+goto-url http://localhost/

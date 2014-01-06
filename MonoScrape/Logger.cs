@@ -34,9 +34,23 @@ namespace MonoScrape {
 		// --------------------------------------------------
 		public void Info(String format, params object[] args) {
 			// Format the message
-			String message = String.Format("INFO: " + format, args);
+			String message = String.Format(timestamp() + ": INFO: " + format, args);
 			// Write to STDOUT
 			this.output.WriteLine(message);
+		}
+		
+		// --------------------------------------------------
+		// timestamp
+		// --------------------------------------------------
+		public String timestamp() {
+			return DateTime.Now.ToString("HH:mm:ss.ffff");
+		}
+		
+		// --------------------------------------------------
+		// Verbose
+		// --------------------------------------------------
+		public void Verbose(String format, params object[] args) {
+			
 		}
 	}
 }

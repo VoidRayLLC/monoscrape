@@ -1,7 +1,7 @@
 EXECUTABLE  = monoscrape.exe
 MONO_BUILD  = mcs
 SDK_VERSION = 4
-MY_SOURCES  = Browser.cs JSObjectExtensions.cs Logger.cs Program.cs
+MY_SOURCES  = Browser.cs IScriptlet.cs JSObjectExtensions.cs Logger.cs Program.cs ResourceInterceptor.cs
 SOURCES    += $(addprefix MonoScrape/,$(MY_SOURCES))
 SOURCES    += ArgParse/Options.cs
 SOURCES    += deveelrl/src/deveelrl/Deveel/*.cs

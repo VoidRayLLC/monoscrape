@@ -186,7 +186,7 @@ namespace MonoScrape
 			// Make a javascript event object
 			JSObject jsEvent = document.Invoke("createEvent", "HTMLEvents");
 			// Initialize the event as a click event with bubbling and canceling
-			jsEvent.Invoke("initEvent", "click", true, true);
+			jsEvent.Invoke("initEvent", eventName, true, true);
 			// Trigger the event on the object
 			self.Invoke("dispatchEvent", jsEvent);
 		}

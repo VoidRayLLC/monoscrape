@@ -1,0 +1,3 @@
+[submodule "deveelrl"]
+	path = deveelrl
+	url = git@github.com:tarwich/deveelrl

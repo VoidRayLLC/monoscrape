@@ -1,20 +1,43 @@
 using ArgParse;
-using Awesomium.Core;
 using Awesomium.Core.Data;
+using Awesomium.Core;
 using Deveel;
+using Microsoft.CSharp;
+using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
-using System;
+using System.Reflection;
+using System.Threading;
 
 namespace MonoScrape {
-	internal class Program {
+	public class Program {
 		protected Boolean Verbose;
-		protected Boolean Running = true;
+		protected volatile Boolean Running = true;
 		protected Logger log = Logger.DefaultLogger;
 		protected Browser browser;
 		protected SortedDictionary<String, Command> commands;
-		protected List<String> preScripts = new List<String>();
+		protected Queue<String> lines = new Queue<String>();
+		
+		public String UserAgent {
+			get {
+				return ((ResourceInterceptor) WebCore.ResourceInterceptor).UserAgent;
+			}
+			
+			set {
+				String agent = value;
+				if(AgentStrings.ContainsKey(agent)) agent = AgentStrings[agent];
+				((ResourceInterceptor) WebCore.ResourceInterceptor).UserAgent = agent;
+			}
+		}
 		public JSObject Bridge = null;
+		public Dictionary<String, String> AgentStrings = new Dictionary<String, String>() {
+			{"IE6"  , "Mozilla/4.0 (compatible; MSIE 6.1; Windows XP); en-US"}                                                                      , 
+			{"IE7"  , "Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)"}                                                                  , 
+			{"IE8"  , "Mozilla/5.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0; GTB7.4; InfoPath.2; SV1; .NET CLR 3.3.69573; WOW64; en-US)"} , 
+			{"IE9"  , "Mozilla/5.0 (Windows; U; MSIE 9.0; Windows NT 9.0; en-US)"}                                                                  , 
+			{"IE10" , "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; WOW64; Trident/6.0)"}                                                    , 
+		};
 		
 		public class Command {
 			public String Name;
@@ -37,57 +60,68 @@ namespace MonoScrape {
 		}
 		
 		// --------------------------------------------------
-		// Program
+		// Program (Constructor)
 		// --------------------------------------------------
 		public Program() {
 			// Setup the commands
 			commands = new SortedDictionary<String, Command>() {
-				{ "add-pre-script" , new Command("add-pre-script" , Command_AddPreScript , "Add a script to run before every page load") }              , 
-				{ "exit"           , new Command("exit"           , Command_Quit         , "Alias for quit") }                                          , 
-				{ "goto-url"       , new Command("goto-url"       , Command_GotoURL      , "Load a URL into the browser") }                             , 
-				{ "include"        , new Command("include"        , Command_Include      , "Include a javascript resource") }                           , 
-				{ "js"             , new Command("js"             , Command_JS           , "Run a line of javascript") }                                , 
-				{ "quit"           , new Command("quit"           , Command_Quit         , "Quits the application entirely") }                          , 
-				{ "run"            , new Command("run"            , Command_Run          , "Run a scraper script which is just a series of commands") } , 
-				{ "screenshot"     , new Command("screenshot"     , Command_Screenshot   , "Save a screenshot of the current page") }                   , 
+				{ "add-post-script" , new Command("add-post-script" , Command_AddPostScript , "Add a script to run after every page load") }               , 
+				{ "agent"           , new Command("agent"           , Command_UserAgent     , "Alias for user-agent") }                                    , 
+				{ "back"            , new Command("back"            , Command_GoBack        , "Go back one page in history") }                             , 
+				{ "exit"            , new Command("exit"            , Command_Quit          , "Alias for quit") }                                          , 
+				{ "goto-url"        , new Command("goto-url"        , Command_GotoURL       , "Load a URL into the browser") }                             , 
+				{ "include"         , new Command("include"         , Command_Include       , "Include a javascript resource") }                           , 
+				{ "js"              , new Command("js"              , Command_JS            , "Run a line of javascript") }                                , 
+				{ "quit"            , new Command("quit"            , Command_Quit          , "Quits the application entirely") }                          , 
+				{ "run"             , new Command("run"             , Command_Run           , "Run a C# script") }                                         , 
+				{ "scrape"          , new Command("scrape"          , Command_Scrape        , "Run a scraper script which is just a series of commands") } , 
+				{ "screenshot"      , new Command("screenshot"      , Command_Screenshot    , "Save a screenshot of the current page") }                   , 
+				{ "tree"            , new Command("tree"            , Command_Tree          , "Prints a tree of the current page") }                       , 
+				{ "user-agent"      , new Command("user-agent"      , Command_UserAgent     , "Set the current user agent for subsequent browser loads") } , 
 			};
 		}
 		
 		// --------------------------------------------------
-		// Command_AddPreScript
+		// Click
 		// --------------------------------------------------
-		public void Command_AddPreScript(String line) {
-			String[] parts = line.Split(new char[] {' '}, 2);
-			String filename = parts.Length > 1 ? parts[1] : "";
-			preScripts.Add(filename);
+		public void Click(JSObject target) {
+			target.Invoke("click");
+		}
+		
+		// --------------------------------------------------
+		// Command_AddPostScript
+		// --------------------------------------------------
+		public void Command_AddPostScript(String line) {
+			browser.AddPostScript(line);
+		}
+		
+		// --------------------------------------------------
+		// Command_GoBack
+		// --------------------------------------------------
+		public void Command_GoBack(String line) {
+			browser.GoBack();
 		}
 		
 		// --------------------------------------------------
 		// Command_GotoURL
 		// --------------------------------------------------
 		public void Command_GotoURL(String line) {
-			// Get the url from the line
-			String url = line.Substring(line.IndexOf(' ') + 1);
 			// Tell the browser to go to the url
-			browser.LoadURL(url);
+			browser.LoadURL(line);
 		}
 		
 		// --------------------------------------------------
 		// Command_Include
 		// --------------------------------------------------
 		public void Command_Include(String line) {
-			String[] parts = line.Split(new char[] {' '}, 2);
-			String file = parts.Length > 1 ? parts[1] : "";
-			Include(file);
+			Include(line);
 		}
 		
 		// --------------------------------------------------
 		// Command_JS
 		// --------------------------------------------------
 		public void Command_JS(String line) {
-			String[] parts = line.Split(new char[] {' '}, 2);
-			String js = (parts.Length > 1) ? parts[1] : "";
-			JSValue result = browser.RunJS(js);
+			JSValue result = browser.RunJS(line);
 			Console.WriteLine(result.ToString());
 		}
 		
@@ -101,24 +135,109 @@ namespace MonoScrape {
 		// --------------------------------------------------
 		// Command_Run
 		// --------------------------------------------------
-		public void Command_Run(String line) {
-			String[] parts = line.Split(new char[] {' '}, 2);
-			String filename = parts.Length > 1 ? parts[1] : "";
+		public void Command_Run(String filename) {
+			RunScript(filename);
+		}
+		
+		// --------------------------------------------------
+		// Command_Scrape
+		// --------------------------------------------------
+		public void Command_Scrape(String line) {
 			// Show an error if the filename is empty
-			if(filename.Trim() == "") log.Error("Syntax: run <file>");
+			if(line.Trim() == "") log.Error("Syntax: run <file>");
 			// Run the file
-			else RunFile(filename);
+			else RunScrapeFile(line);
 		}
 		
 		// --------------------------------------------------
 		// Command_Screenshot
 		// --------------------------------------------------
 		public void Command_Screenshot(String line) {
-			String[] parts = line.Split(new char[] {' '}, 2);
-			String filename = parts.Length > 1 ? parts[1] : "";
 			// Make sure the filename isn't an empty string
-			if(filename.Trim() == "") filename = null;
-			browser.SavePNG(filename ?? "browser.png");
+			if(line.Trim() == "") line = null;
+			browser.SavePNG(line ?? "browser.png");
+		}
+		
+		// --------------------------------------------------
+		// Command_Tree
+		// --------------------------------------------------
+		public void Command_Tree(String line) {
+			JSObject document = browser.RunJS("document");
+			
+			Action<JSObject, int> Recursor;
+			
+			Recursor = (o,depth) => {
+				log.Info(new String('\t', depth) + o["tagName"]);
+				
+				if(o["hasChildNodes"]) {
+					JSObject children = o["childNodes"];
+					JSValue length = children["length"];
+					
+					if(length.IsNumber) {
+						for(int i = 0, iMax=(int)length; i<iMax; ++i) {
+							Recursor(children[i.ToString()], depth+1);
+						}
+					}
+				}
+			};
+			
+			Recursor(document, 0);
+		}
+		
+		// --------------------------------------------------
+		// Command_UserAgent
+		// --------------------------------------------------
+		public void Command_UserAgent(String line) {
+			UserAgent = line;
+		}
+		
+		// --------------------------------------------------
+		// CompileCode
+		// --------------------------------------------------
+		public IScriptlet CompileCode(String code) {
+			// Create a code provider
+			// This class implements the 'CodeDomProvider' class as its base. All of the current .Net languages (at least Microsoft ones)
+			// come with thier own implemtation, thus you can allow the user to use the language of thier choice (though i recommend that
+			// you don't allow the use of c++, which is too volatile for scripting use - memory leaks anyone?)
+			CSharpCodeProvider csProvider = new CSharpCodeProvider();
+
+			// Setup our options
+			CompilerParameters compileParameters = new CompilerParameters() {
+				GenerateExecutable = false , // We want a Dll (or "Class Library" as its called in .Net)
+				GenerateInMemory = true    , // Saves us from deleting the Dll when we are done with it. Though you
+				                             // could set this to false and save start-up time by next time by not
+				                             // having to re-compile And set any others you want, there a quite a few,
+				                             // take some time to look through them all and decide which fit your
+				                             // application best!
+			};
+
+			// Add the current assembly to the script
+			compileParameters.ReferencedAssemblies.Add(Assembly.GetExecutingAssembly().Location);
+			// Compile our code
+			CompilerResults result = csProvider.CompileAssemblyFromSource(compileParameters, code);
+			
+			// Document any compilation errors/warning
+			if(result.Errors.Count > 0) {
+				foreach(CompilerError error in result.Errors)
+					log.Error(error.ErrorText);
+			}
+			// If we didn't compile
+			if(result.CompiledAssembly == null) return null;
+			
+			// Go through all the namespaces
+			foreach(Type type in result.CompiledAssembly.GetExportedTypes()) {
+				if(typeof(IScriptlet).IsAssignableFrom(type))
+					return (IScriptlet) Activator.CreateInstance(type);
+			}
+			
+			return null;
+		}
+		
+		// --------------------------------------------------
+		// DumpText
+		// --------------------------------------------------
+		public void DumpText(String file, String text) {
+			File.WriteAllText("data/" + file, text);
 		}
 		
 		// --------------------------------------------------
@@ -126,6 +245,16 @@ namespace MonoScrape {
 		// --------------------------------------------------
 		public void Include(String jsFile) {
 			browser.Include("assets/" + jsFile);
+		}
+		
+		// --------------------------------------------------
+		// LoadText
+		// --------------------------------------------------
+		public String LoadText(String file) {
+			// Don't return anything if the file cannot be found
+			if(!File.Exists("data/" + file)) return "";
+			// Read and return the text from the file
+			return File.ReadAllText("data/" + file);
 		}
 		
 		// --------------------------------------------------
@@ -150,11 +279,13 @@ namespace MonoScrape {
 			
 			// Parse the arguments
 			options.Parse(args);
+			// Get a file to run
+			String scriptFile = options.Parameters.Count > 0 ? options.Parameters[0] : null;
 			
 			// Run the program
 			new Program() {
 				Verbose = options["verbose"]
-			}.Run();
+			}.Run(scriptFile);
 		}
 		
 		// --------------------------------------------------
@@ -166,8 +297,11 @@ namespace MonoScrape {
 			
 			// Ignore empty lines
 			if(line != "") {
+				// Allow line comments
+				if(line[0] == '#') return;
+				String[] parts = line.Split(new char[] {' '}, 2);
 				// Get the first word of the command
-				String firstWord = line.Split(new char[] {' '}, 2)[0];
+				String firstWord = parts[0];
 				// A list to hold the found candidates
 				List<Command> candidates = new List<Command>();
 				
@@ -190,7 +324,7 @@ namespace MonoScrape {
 				// No commands found
 				else if(candidates.Count == 0) log.Error("Command not found: {0}", firstWord);
 				// One command found, run it
-				else candidates[0].Callback(line);
+				else candidates[0].Callback(parts.Length > 1 ? parts[1] : "");
 			}
 		}
 		
@@ -207,12 +341,12 @@ namespace MonoScrape {
 		// --------------------------------------------------
 		// Run
 		// --------------------------------------------------
-		public void Run() {
+		public void Run(String scriptFile) {
 			// Setup our configuration
 			WebConfig config = new WebConfig() {
-				LogLevel   = LogLevel.Verbose,
+				LogLevel   = LogLevel.None,
 				UserScript = File.ReadAllText("assets/UserScript.js"),
-				
+				RemoteDebuggingPort = 8001,
 			};
 			// Initialize the Awesomium WebCore 
 			WebCore.Initialize(config);
@@ -224,40 +358,69 @@ namespace MonoScrape {
 			this.browser = new Browser(session);
 			// Create the bridge
 			Bridge = browser.CreateGlobalJavascriptObject("Scrape");
+			// Make the back function
+			Bridge.Bind("back", true, (o,e) => Command_GoBack(""));
+			// Make the click function
+			Bridge.Bind("click", true, (o,e) => Click(e.Arguments[0]));
+			// Make a function for writing data
+			Bridge.Bind("dumptext", true, (o,e) => DumpText(e.Arguments[0], e.Arguments[1]));
 			// Make the include function (with no return value)
 			Bridge.Bind("include", true, (o,e)=>Include(e.Arguments[0]));
+			// Make the loadtext function
+			Bridge.Bind("loadtext", true, (o,e) => e.Result = LoadText(e.Arguments[0]));
 			// Make the log function
 			Bridge.Bind("log", true, (o,e) =>log.Info(e.Arguments[0]));
+			// Make the screenshot function
+			Bridge.Bind("screenshot", true, (o,e) => Command_Screenshot(""));
+			// Add a user agent interceptor
+			WebCore.ResourceInterceptor = new ResourceInterceptor();
+			// If a scriptFile was passed, then setup a line for that
+			if(scriptFile != null) lines.Enqueue("scrape " + scriptFile);
+			
+			Thread repl = new Thread(() => {
+				try {
+					while(Running) {
+						// Get a line of input from the user
+						String line = Readline.ReadLine("> ");
+						// Handle CTRL-D
+						if(line == null) Quit();
+						else {
+							// Trim whitespace
+							line = line.Trim();
+							// Add the line to the history
+							History.AddHistory(line);
+							// Add this line to the queue
+							lines.Enqueue(line);
+						}
+					}
+				} catch(ThreadInterruptedException) {
+				}
+			});
+			repl.Start();
 			
 			// The input loop
 			while(Running) {
-				// Get a line of input from the user
-				String line = Readline.ReadLine("> ");
-				// Handle CTRL-D
-				if(line == null) Quit();
-				else {
-					// Trim whitespace
-					line = line.Trim();
-					// Add the line to the history
-					History.AddHistory(line);
-					// Process the line
-					ProcessLine(line);
-				}
+				Thread.Sleep(200);
+				WebCore.Update();
+				if(lines.Count > 0) ProcessLine(lines.Dequeue());
 			}
 			
+			// Force quite the repl thread
+			// FIXME: TODO: Change this to interrupt
+			repl.Abort();
 			// WebCore isn't smart enough to clean itself up
 			WebCore.Shutdown();
 		}
 		
 		// --------------------------------------------------
-		// RunFile
+		// RunScrapeFile
 		// --------------------------------------------------
-		public void RunFile(String filename) {
+		public void RunScrapeFile(String filename) {
 			// Cleanup the filename
 			filename = filename.Trim();
 			// Error when file not found
 			if(!File.Exists(filename)) 
-				log.Error("RunFile cannot find file: {0}", filename);
+				log.Error("RunScrapeFile cannot find file: {0}", filename);
 			
 			else {
 				// I'm going to use a text reader to go through the file line by line
@@ -266,6 +429,19 @@ namespace MonoScrape {
 				while(!reader.EndOfStream) {
 					ProcessLine(reader.ReadLine());
 				}
+			}
+		}
+		
+		// --------------------------------------------------
+		// RunScript
+		// --------------------------------------------------
+		public void RunScript(String script) {
+			if(!File.Exists(script)) script = "assets/" + script;
+			if(!File.Exists(script)) log.Error("Cannot find file: {0}", script);
+			
+			else {
+				IScriptlet scriptlet = CompileCode(File.ReadAllText(script));
+				if(scriptlet != null) scriptlet.Run(this, browser);
 			}
 		}
 	}
