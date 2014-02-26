@@ -1,1 +1,1 @@
-#!/usr/bin/env sudo ssh -L80:localhost:80 -L443:localhost:443 administrator@74.93.128.149
+sudo ssh -L80:localhost:80 -L443:localhost:443 administrator@74.93.128.149

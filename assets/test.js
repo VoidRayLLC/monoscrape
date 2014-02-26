@@ -220,6 +220,39 @@
 	// mode_exportAppointments
 	// --------------------------------------------------
 	ns.mode_exportAppointments = function() {
+		// Make a separate namespace for dealing with the found records
+		function processPage() {
+			// Load each patient inside itself
+			$.frames().find("tr[ondblclick*=ShowChart]").eq(0).each(function() {
+				var $row = $(this);
+				var $td = $(this).find("td:eq(3)");
+				var patientID = $row.attr("ondblclick").match(/\d+/)[0];
+				
+				patientID = 22170756;
+				$div = $.frames().find("div[name=Agr]").empty();
+				$([0,1,2,3,4,5,6,7,8,9]).each(function(i) {
+					$div.append($("<div />").load("ChartViewerList.aspx?PatProfID="+patientID+"&Show=1&Color=Yellow&ItemType="+i+"&ItemId=0 table#ChartGrid"));					
+				});
+			});
+		};
+		
+		// Get the charts link
+		ns.waitForSimple(5000, "charts link", "#MainChartLink", function gotoChartsLink($chartsLink) {
+			// Click the main charts link
+			$chartsLink.simulate("click");
+			
+			// Wait for the search button
+			ns.waitForSimple(5000, "search button", "#SearchButton", function gotoSearchButton($searchButton) {
+				// Click the search button
+				$searchButton.simulate("click");
+				// Wait for a chart to show up, then start processing patients
+				ns.waitFor(15000, "search results", "tr[ondblclick*=ShowChart]", function() {
+					processPage();
+				}, function() {gotoSearchButton($searchButton);} );
+			}, function() {gotoChartsLink($chartsLink);} );
+		});
+		
+		return;
 		var totalPatients;
 		var patientNumber;
 		
@@ -257,48 +290,6 @@
 				// No appointments, continue
 				if(!$rows.length) nextPatient(patients);
 			});
-			
-			// (function loadAppointments() {
-			// 	// Load the appointment list for this patient
-			// 	$.frames().find("#ScheduleIframe").attr("src", "ChartViewerList.aspx?PatProfID="+patientID+"&Show=1&Color=Yellow&ItemType=3&ItemId=0");
-				
-			// 	// Wait for the appointment list
-			// 	ns.waitFor(5000, "appointments list", "table#ChartGrid tr", function processsAppointments($appointments) {
-			// 		// If no appointments, then go to the next patient
-			// 		if($appointments.length < 2) return nextPatient(patients);
-			// 		// Get the appointment ID
-			// 		var appointmentID = $appointments.filter(":not(.datagridHeader)").eq(0).attr("onclick").match(/,\s*(\d+)/)[1];
-			// 		// Load the appointment in the detail iframe
-			// 		$.frames().find("#ScheduleIframe").attr("src", "ChartApptDetail.aspx?ApptID=" + appointmentID);
-					
-			// 		ns.waitFor(3000, "Appointment data", "table#ApptTbl tr", function($tr) {
-			// 			// Collect the data
-			// 			var data = "";
-						
-			// 			$tr.each(function() {
-			// 				var $td = $(this).find("td");
-							
-			// 				data += 
-			// 					$td.eq(0).text().replace(":", "").trim()
-			// 					+ ": " 
-			// 					+ $td.eq(1).text()
-			// 					+ "\n"
-			// 				;
-			// 			});
-						
-			// 			var filename = "patient." + patientID + ".appointment." + appointmentID;
-			// 			// Write the data to the file
-			// 			Scrape.dumptext(filename, data);
-			// 			ns.log("Wrote " + filename);
-						
-			// 			// Process the next appointment
-			// 			processsAppointments($appointments.slice(2));
-			// 		}, function() {
-			// 			// Re-process this appointment
-			// 			processsAppointments($appointments);
-			// 		});
-			// 	}, loadAppointments);
-			// })();
 		});
 	};
 	
@@ -460,6 +451,16 @@
 		});
 		
 		return data;
+	};
+	
+	ns.urlPatient = function(patientID) {
+		// ChartViewer.aspx?PatProfID=999999&ItemType=0&ItemID=0&FromFind=1&PatName=JimBob
+		return "ChartViewer.aspx?" + $.param({
+			PatProfID : patientID,
+			ItemType  : 0,
+			ItemID    : 0,
+			FromFind  : 1,
+		});
 	};
 	
 	// --------------------------------------------------
