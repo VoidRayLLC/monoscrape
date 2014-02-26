@@ -7,4 +7,4 @@ add-post-script j-ulrich/jquery.simulate.ext.js
 
 add-post-script test.js
 
-goto-url http://localhost/
+goto-url https://www.account3000.com/fftam/aspx/tfalogin.aspx

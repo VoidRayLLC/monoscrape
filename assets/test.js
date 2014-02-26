@@ -338,16 +338,22 @@
 	// mode_start
 	// --------------------------------------------------
 	ns.mode_start = function() {
-		ns.waitForSimple(5000, "starting page", "#txtUserName,#MainChartLink", function() {
-			if($("#txtUserName").length) {
-				ns.log("Logging in...");
-				$("#txtServer").val("43");
-				$("#txtUserName").val("support");
-				$("#txtUserPass").val("eyeball1");
-				$("#btnLogon").simulate("click");
-			}
-			else ns.step("exportAppointments");
+		ns.waitForSimple(5000, "username field", "#USERID", function($input) {
+			console.log("Entering username...");
+			$input.val("schnitmann");
+			console.log("Clicking submit...");
+			$("input#cont").click();
 		});
+		// ns.waitForSimple(5000, "starting page", "#txtUserName,#MainChartLink", function() {
+		// 	if($("#txtUserName").length) {
+		// 		ns.log("Logging in...");
+		// 		$("#txtServer").val("43");
+		// 		$("#txtUserName").val("support");
+		// 		$("#txtUserPass").val("eyeball1");
+		// 		$("#btnLogon").simulate("click");
+		// 	}
+		// 	else ns.step("exportAppointments");
+		// });
 	};
 	
 	// --------------------------------------------------
